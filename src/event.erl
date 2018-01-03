@@ -4,8 +4,8 @@
                               %% the event name that will trigger and
                               %% the server pid to send notifications to
 -record(state, {server, %% Server PID
-                name ="", %% Server Name
-                to_go=0}). %% Specifies how much you do want to wait. It should be initialized > 0
+                name ="", %% Event Name
+                to_go=0}). %% Event Time to wait
 
 %% Start Function
 start(EventName,Delay) ->
@@ -36,6 +36,6 @@ loop(S=#state{server=Server}) ->
     receive
         {Server,Ref, cancel} -> %%Cancel Message
             Server ! {Ref,ok}
-    after S#state.to_go*1000 ->
+    after S#state.to_go*1000 -> %% Wait feature, after this the server is notified with a done message
         Server ! {done, S#state.name}
     end.
