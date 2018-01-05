@@ -64,39 +64,48 @@ add_event(Name, Description, Timeout) ->
 
 
 
-
-
-
-
-
 loop(S= #state{}) ->
     receive
         {Pid, MsgRef, {subscribe, Client}} ->
             Ref = erlang:monitor(process,Client),
             NewClients = orddict:store(Ref,Client,S#state.clients), %%We store the client undern the key ref because when it dies that's how we remove it.
             Pid ! {MsgRef, ok},
-            %%loop(S#state={clients=NewClients});
+            loop(S#state{clients=NewClients});
         {Pid, MsgRef, {add, Name, Description, Timeout}} ->
             %%Adds an event
             EventPid = event:start(Name,Timeout),
             NewEvents = orddict:store(Name,
-                                    #event{name=Name,
+                                    #events{name=Name,
                                     description=Description,
                                     pid=EventPid,
-                                    timeout=Timeout}),
+                                    timeout=Timeout},
                                 S#state.events),
-            Pid ! {MsgRef,ok}
+            Pid ! {MsgRef,ok},
             loop(S#state{events=NewEvents});
-%       {Pid, MsgRef, {cancel, Name}} ->
-            %% Kills an event
-%        ...
-%            Pid ! {MsgRef,ok}
-%       {done, Name} ->
-%            ...
+        {Pid, MsgRef, {cancel, Name}} ->
+           Events = case orddict:find(Name,S#state.events) of
+                            {ok,E} ->
+                                event:cancel(E#events.pid),
+                                orddict:erase(Name,S#state.events); 
+                            error ->
+                                S#state.events
+                    end,
+            Pid ! {MsgRef,ok},
+            loop(S#state{events=Events});
+        {done, Name} ->
+            case orddict:find(Name,S#state.events) of
+                {ok, E} ->
+                    send_to_clients({done, E#events.name, E#events.description},
+                                    S#state.clients),
+                    NewEvents = orddict:erase(Name, S#state.events),
+                    loop(S#state{events=NewEvents});
+                error ->
+                    loop(S)
+                end;
         shutdown ->
             exit(shutdown);
-%       {'DOWN', Ref, process, _Pid, _Reason} ->
-%            ...
+       {'DOWN', Ref, process, _Pid, _Reason} ->
+            loop(S#state{clients=orddict:erase(Ref, S#state.clients)});
 %       code_change ->
 %            ...
         Unknown ->
@@ -104,4 +113,6 @@ loop(S= #state{}) ->
             loop(S)
     end. 
 
+send_to_clients(Msg, ClientDict) ->
+    lists:map(fun(_Ref,Pid) -> Pid ! Msg end, ClientDict).
    

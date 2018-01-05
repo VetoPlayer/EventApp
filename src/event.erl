@@ -15,8 +15,8 @@ start_link(EventName,Delay) ->
     spawn_link(?MODULE,init,[self(),EventName,Delay]).
 
 %%Internal initialization function
-init(Server,EventName,Delay) ->
-    loop(#state{server=Server,name=EventName,to_go=Delay}).
+init(ServerPid,EventName,Delay) ->
+    loop(#state{server=ServerPid,name=EventName,to_go=Delay}).
 
 %% Cancel message user API
 cancel(Pid) ->
@@ -24,19 +24,21 @@ cancel(Pid) ->
     Ref = erlang:monitor(process,Pid),
     Pid ! {self(), Ref, cancel},
     receive
-        {Ref,ok} ->
+        {Ref,ok} -> %%Expected case
             erlang:demonitor(Ref,[flush]),
+            io:format("Canceled Successfully"),
             ok;
-        {'DOWN',Ref,process,Pid,_Reason} ->
+        {'DOWN',Ref,process,Pid,_Reason} -> %%The process is already dead
             ok
     end.
 
 
 %% Loop function with State. This is the function keeping track of the time
-loop(S=#state{server=Server}) ->
+loop(S=#state{server=ServerPid}) ->
     receive
-        {Server, Ref, cancel} -> %%Cancel Message
-            Server ! {Ref,ok}
+        {ServerPid, Ref, cancel} -> %%Cancel Message
+            ServerPid ! {Ref,ok}
     after S#state.to_go*1000 -> %% Wait feature, after this the server is notified with a done message
-        Server ! {done, S#state.name}
+        io:format("Finished ~n"),
+        ServerPid ! {done, S#state.name}
     end.
