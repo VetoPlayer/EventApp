@@ -11,7 +11,7 @@
 start(EventName,Delay) ->
     spawn(?MODULE,init,[self(),EventName,Delay]).
     
-start_link() ->
+start_link(EventName,Delay) ->
     spawn_link(?MODULE,init,[self(),EventName,Delay]).
 
 %%Internal initialization function
@@ -21,10 +21,11 @@ init(Server,EventName,Delay) ->
 %% Cancel message user API
 cancel(Pid) ->
     %% Monitor in case the process is already dead
-    Pid ! {self(),Ref, cancel},
+    Ref = erlang:monitor(process,Pid),
+    Pid ! {self(), Ref, cancel},
     receive
         {Ref,ok} ->
-            erlang:demonitor(ref,[flush]),
+            erlang:demonitor(Ref,[flush]),
             ok;
         {'DOWN',Ref,process,Pid,_Reason} ->
             ok
@@ -34,7 +35,7 @@ cancel(Pid) ->
 %% Loop function with State. This is the function keeping track of the time
 loop(S=#state{server=Server}) ->
     receive
-        {Server,Ref, cancel} -> %%Cancel Message
+        {Server, Ref, cancel} -> %%Cancel Message
             Server ! {Ref,ok}
     after S#state.to_go*1000 -> %% Wait feature, after this the server is notified with a done message
         Server ! {done, S#state.name}
